@@ -52,6 +52,8 @@ out/
 tmp/
 bazel-out/
 *.tsbuildinfo
+# Paquete de deploy generado por el workflow (espejo del APP_DIR del VPS)
+deploy-out/
 
 # ---- Cachés de frameworks ----
 .angular/

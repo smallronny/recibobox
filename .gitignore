@@ -1,0 +1,105 @@
+# ============================================================
+# .gitignore principal del monorepo (aplica a todo el repo)
+# Ignora todo archivo vulnerable, sensible o generado.
+# ============================================================
+
+# ---- Entornos y secretos (NUNCA commitear) ----
+.env
+.env.*
+*.env
+.env.local
+.env.local.*
+!.env.example
+!.env.example.*
+secrets.json
+credentials.json
+config/local.json
+
+# ---- Claves privadas, certificados y tokens ----
+*.pem
+*.key
+*.p12
+*.pfx
+*.p7b
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+*.ppk
+
+# ---- Dumps, respaldos y datos excluidos ----
+*.dump
+*.bak
+*.backup
+*.sql.gz
+*.sqlite
+*.sqlite3
+*.db
+*.orig
+
+# ---- Dependencias ----
+node_modules/
+
+# ---- Artefactos compilados / de build ----
+dist/
+build/
+out-tsc/
+out/
+tmp/
+bazel-out/
+*.tsbuildinfo
+
+# ---- Cachés de frameworks ----
+.angular/
+.nx/
+.turbo/
+.sass-cache/
+.eslintcache
+.stylelintcache
+
+# ---- Cobertura y resultados de tests ----
+coverage/
+.nyc_output/
+libpeerconnection.log
+testem.log
+__screenshots__/
+
+# ---- Logs ----
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- IDEs y editores ----
+.idea/
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+*.sublime-project
+.history/
+**/.vscode/*
+!**/.vscode/settings.json
+!**/.vscode/tasks.json
+!**/.vscode/launch.json
+!**/.vscode/extensions.json
+!**/.vscode/mcp.json
+
+# ---- Sistema operativo ----
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+prompt-sistema.md

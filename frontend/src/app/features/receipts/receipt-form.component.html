@@ -1,0 +1,111 @@
+<div class="mx-auto max-w-2xl space-y-6 p-6">
+  <header class="space-y-1">
+    <h1 class="text-2xl font-semibold text-slate-800">Nuevo recibo de pago</h1>
+    <p class="text-sm text-slate-500">IVA 16% calculado sobre el monto en Bs.</p>
+  </header>
+
+  @if (error()) {
+    <p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error() }}</p>
+  }
+
+  @if (saved(); as r) {
+    <section class="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-6">
+      <h2 class="text-lg font-semibold text-emerald-800">Recibo N.º {{ r.receipt_number }} emitido</h2>
+      <p class="text-sm text-emerald-700">
+        Total recibido: <strong>{{ r.total_received | number:'1.2-2' }} Bs.</strong>
+        · {{ r.amount_usd | number:'1.2-2' }} USD
+      </p>
+      <div class="flex gap-3 pt-1">
+        <a [href]="pdfUrl(r.id)" target="_blank"
+           class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
+          Descargar PDF
+        </a>
+        <button (click)="reset()"
+                class="rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100">
+          Nuevo recibo
+        </button>
+      </div>
+    </section>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="onSubmit()"
+          class="space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+
+      <label class="block text-sm font-medium text-slate-600">
+        Inquilino
+        <select formControlName="tenant_id"
+                class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+          <option value="" disabled>Seleccionar…</option>
+          @for (t of tenants(); track t.id) {
+            <option [value]="t.id">{{ t.full_name }} · Local {{ t.local_number }}</option>
+          }
+        </select>
+      </label>
+
+      <div class="grid grid-cols-3 gap-3 text-sm font-medium text-slate-600">
+        <label>Mes del pago
+          <select formControlName="period_month"
+                  class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            @for (m of months; track m.value) {
+              <option [value]="m.value">{{ m.label }}</option>
+            }
+          </select>
+        </label>
+        <label>Año
+          <input type="number" formControlName="period_year" min="2000" max="2100"
+                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+        </label>
+        <label>Fecha de emisión
+          <input type="date" formControlName="issue_date"
+                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+        </label>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3 text-sm font-medium text-slate-600">
+        <label>Monto (USD)
+          <input type="number" step="0.01" min="0" formControlName="amount_usd"
+                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+        </label>
+        <label>Tasa (Bs./USD)
+          <input type="number" step="0.0001" min="0" formControlName="exchange_rate"
+                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+        </label>
+        <label>Monto (Bs.)
+          <input type="number" step="0.01" min="0" formControlName="amount_bs"
+                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+        </label>
+      </div>
+
+      <dl class="space-y-1.5 rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
+        <div class="flex items-center justify-between">
+          <dt>Monto (Bs.)</dt>
+          <dd>{{ amountBs() | number:'1.2-2' }} Bs.</dd>
+        </div>
+        <div class="flex items-center justify-between">
+          <dt>IVA (16%)</dt>
+          <dd>{{ iva() | number:'1.2-2' }} Bs.</dd>
+        </div>
+        <div class="flex items-center justify-between border-t border-slate-200 pt-1.5 text-base font-semibold text-slate-800">
+          <dt>Total recibido</dt>
+          <dd>{{ total() | number:'1.2-2' }} Bs.</dd>
+        </div>
+      </dl>
+
+      <label class="block text-sm font-medium text-slate-600">
+        Referencia de pago bancario
+        <input formControlName="payment_reference" placeholder="Ej. 000123456789"
+               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+      </label>
+
+      <label class="flex items-center gap-2 text-sm text-slate-600">
+        <input type="checkbox" formControlName="send_whatsapp"
+               class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+        Enviar por WhatsApp al inquilino (con copia al administrador)
+      </label>
+
+      <button type="submit" [disabled]="saving()"
+              class="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+        {{ saving() ? 'Generando…' : 'Generar recibo' }}
+      </button>
+    </form>
+  }
+</div>

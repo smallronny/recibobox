@@ -1,0 +1,85 @@
+<div class="mx-auto max-w-3xl space-y-6 p-6">
+  <header class="flex items-center justify-between">
+    <div class="space-y-1">
+      <h1 class="text-2xl font-semibold text-slate-800">Recibos</h1>
+      <p class="text-sm text-slate-500">Histórico de pagos con acceso al PDF dual.</p>
+    </div>
+    <a routerLink="/recibos/nuevo"
+       class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">+ Nuevo</a>
+  </header>
+
+  <div [formGroup]="filterForm"
+       class="grid grid-cols-3 gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm font-medium text-slate-600 shadow-sm">
+    <label>Inquilino
+      <select formControlName="tenant_id"
+              class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-800 outline-none focus:border-blue-500">
+        <option value="">Todos</option>
+        @for (t of tenants(); track t.id) {
+          <option [value]="t.id">{{ t.full_name }}</option>
+        }
+      </select>
+    </label>
+    <label>Año
+      <input type="number" formControlName="year"
+             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-blue-500" />
+    </label>
+    <label>Mes
+      <select formControlName="month"
+              class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-800 outline-none focus:border-blue-500">
+        <option value="">Todos</option>
+        @for (m of months; track m.value) {
+          <option [value]="m.value">{{ m.label }}</option>
+        }
+      </select>
+    </label>
+  </div>
+
+  @if (receipts() === null) {
+    <p class="text-sm text-slate-500">Cargando recibos…</p>
+  } @else {
+    <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <table class="w-full text-left text-sm">
+        <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-4 py-3">Recibo</th>
+            <th class="px-4 py-3">Período</th>
+            <th class="px-4 py-3">Inquilino</th>
+            <th class="px-4 py-3 text-right">Total recibido</th>
+            <th class="px-4 py-3">WhatsApp</th>
+            <th class="px-4 py-3 text-right">PDF</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          @for (r of receipts(); track r.id) {
+            <tr class="hover:bg-slate-50">
+              <td class="px-4 py-3 font-mono text-slate-700">#{{ r.receipt_number }}</td>
+              <td class="px-4 py-3 text-slate-600">{{ monthName(r.period_month) }} {{ r.period_year }}</td>
+              <td class="px-4 py-3">
+                <div class="font-medium text-slate-800">{{ r.tenant_name }}</div>
+                <div class="text-xs text-slate-500">Local {{ r.local_number }}</div>
+              </td>
+              <td class="px-4 py-3 text-right">
+                <div class="font-semibold text-slate-800">{{ r.total_received | number:'1.2-2' }} Bs.</div>
+                <div class="text-xs text-slate-500">{{ r.amount_usd | number:'1.2-2' }} USD</div>
+              </td>
+              <td class="px-4 py-3">
+                @if (r.whatsapp_sent) {
+                  <span class="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">Enviado</span>
+                } @else {
+                  <span class="inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">Pendiente</span>
+                }
+              </td>
+              <td class="px-4 py-3 text-right">
+                <a [href]="pdfUrl(r.id)" target="_blank" class="text-xs font-medium text-blue-600 hover:underline">Descargar</a>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="6" class="px-4 py-6 text-center text-slate-500">Sin recibos para los filtros actuales.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

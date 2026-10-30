@@ -37,8 +37,6 @@ jobs:
               - 'angular/**'
             api:
               - 'nest/**'
-            workspace:
-              - 'yobusco-angular-backoffice/**'
 
       - name: Chequeo de variables y secretos
         env:
@@ -107,7 +105,7 @@ jobs:
       # PASOS DE COMPILACIÓN (BUILD)
       # -----------------------------------------------------------------
 
-      - name: Instalar dependencias globales del monorepo
+      - name: Instalar dependencias globales del repositorio
         run: npm ci
 
       - name: Build Angular Website
@@ -124,13 +122,6 @@ jobs:
           npm ci
           npm run build
 
-      - name: Build Angular Dashboard
-        if: steps.changes.outputs.workspace == 'true'
-        working-directory: ./yobusco-angular-backoffice
-        run: |
-          npm ci
-          npx ng build --configuration production --base-href /dash/
-
       # -----------------------------------------------------------------
       # PREPARACIÓN DE CARPETAS EN EL SERVIDOR Y RSYNC
       # -----------------------------------------------------------------
@@ -140,7 +131,7 @@ jobs:
           SSH_HOST: ${{ secrets.SERVER_HOST }}
           SSH_USER: ${{ secrets.SERVER_USER }}
         run: |
-          ${SSH_BASE} "$SSH_USER@$SSH_HOST" "mkdir -p '$APP_DIR/website' '$APP_DIR/backend' '$APP_DIR/dash'"
+          ${SSH_BASE} "$SSH_USER@$SSH_HOST" "mkdir -p '$APP_DIR/website' '$APP_DIR/backend'"
 
       - name: Sincronizar Website Angular (si cambió)
         if: steps.changes.outputs.angular == 'true'
@@ -164,16 +155,6 @@ jobs:
             ./nest/package-lock.json \
             "${SSH_USER}@${SSH_HOST}:${APP_DIR}/backend/"
 
-      - name: Sincronizar Dashboard (si cambió)
-        if: steps.changes.outputs.workspace == 'true'
-        env:
-          SSH_HOST: ${{ secrets.SERVER_HOST }}
-          SSH_USER: ${{ secrets.SERVER_USER }}
-        run: |
-          rsync -avz --delete -e "$SSH_BASE" \
-            ./yobusco-angular-backoffice/dist/johana-angular/browser/ \
-            "${SSH_USER}@${SSH_HOST}:${APP_DIR}/dash/"
-
       # -----------------------------------------------------------------
       # INSTALACIÓN Y REINICIO DE SERVICIOS EN EL SERVIDOR
       # -----------------------------------------------------------------
@@ -196,12 +177,12 @@ jobs:
 
             # 1. Si hubo cambios en la API NestJS, instalar dependencias de producción
             if [ "${{ steps.changes.outputs.api }}" = "true" ]; then
-              cd /var/www/html/yobusco/backend
+              cd ${{ env.APP_DIR }}/backend
               npm install --omit=dev
             fi
 
             # 2. Ir a la raíz del servidor donde se encuentra ecosystem.config.js
-            cd /var/www/html/yobusco
+            cd ${{ env.APP_DIR }}
 
             # 3. Recargar/Reiniciar los procesos de PM2
             pm2 reload ecosystem.config.js || pm2 restart ecosystem.config.js

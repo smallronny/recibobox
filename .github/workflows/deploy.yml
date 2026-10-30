@@ -1,18 +1,9 @@
-name: Deploy VPS (pm2 + nginx)
-
-# Despliega el monorepo a un servidor Linux propio:
-#   - frontend (Angular estático)         → {SERVER_APP_DIR}/web/       (nginx, raíz del dominio)
-#   - backend  (dist + node_modules prod) → {SERVER_APP_DIR}/backend/   (pm2 + nginx proxy /api)
-#
-# El build ocurre en este runner; al servidor solo viajan artefactos por
-# rsync/SSH. Después el workflow ejecuta deploy/server-deploy.sh en el
-# servidor: pm2 reload de `recibo-box-api`, pm2 save y health check.
-# Preparación única del servidor y secretos: README.md → "Despliegue a VPS
-# (GitHub Actions + pm2 + nginx)".
+name: Continuous Integration & Deployment (CI/CD)
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 concurrency:
@@ -23,78 +14,71 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     env:
       SITE_URL: ${{ vars.SITE_URL }}
-      APP_DIR: ${{ vars.SERVER_APP_DIR || '/opt/recibo-box' }}
-      SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+      APP_DIR: ${{ vars.SERVER_APP_DIR || '/var/www/html/yobusco' }}
+      SSH_PORT: ${{ secrets.SERVER_PORT || '22' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      # 1. Detectar qué aplicaciones sufrieron cambios
+      - name: Check for file changes
+        id: changes
+        uses: dorny/paths-filter@v3
         with:
-          node-version: 22
-          cache: npm
+          filters: |
+            angular:
+              - 'angular/**'
+            api:
+              - 'nest/**'
+            workspace:
+              - 'yobusco-angular-backoffice/**'
 
       - name: Chequeo de variables y secretos
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SERVER_HOST }}
+          SSH_USER: ${{ secrets.SERVER_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
         run: |
           set -euo pipefail
           fallas=0
 
-          if [ -z "$SITE_URL" ]; then
-            echo "::error::Configura la variable SITE_URL (ej. https://tudominio.com)"; fallas=1
-          fi
           if [ -z "$SSH_HOST" ]; then
-            echo "::error::Configura el secreto SSH_HOST (IP o dominio del servidor)"; fallas=1
+            echo "::error::Configura el secreto SERVER_HOST (IP o dominio del servidor)"; fallas=1
           fi
           if [ -z "$SSH_USER" ]; then
-            echo "::error::Configura el secreto SSH_USER (usuario con permiso de escritura en SERVER_APP_DIR)"; fallas=1
+            echo "::error::Configura el secreto SERVER_USER (usuario con permisos)"; fallas=1
           fi
           if [ -z "$SSH_PRIVATE_KEY" ]; then
-            echo "::error::Configura el secreto SSH_PRIVATE_KEY (clave privada sin passphrase, ver README)"; fallas=1
+            echo "::error::Configura el secreto SERVER_SSH_KEY (clave privada sin passphrase)"; fallas=1
           fi
           if [ "$fallas" != 0 ]; then exit 1; fi
 
-          case "$SITE_URL" in
-            http*://*) : ;;
-            *) echo "::error::SITE_URL debe ser una URL absoluta (https://…)"; exit 1 ;;
-          esac
-          case "$APP_DIR" in
-            /*) : ;;
-            *) echo "::error::SERVER_APP_DIR debe ser una ruta absoluta (ej. /opt/recibo-box)"; exit 1 ;;
-          esac
-          # Valores seguros para inyectarse en comandos ssh/rsync
+          # Validaciones de seguridad en variables
           if ! printf '%s' "$APP_DIR" | grep -qE '^[A-Za-z0-9._/-]+$'; then
-            echo "::error::SERVER_APP_DIR no debe contener espacios ni comillas"; exit 1
+            echo "::error::SERVER_APP_DIR no debe contener espacios ni caracteres inválidos"; exit 1
           fi
           if ! printf '%s' "$SSH_HOST" | grep -qE '^[A-Za-z0-9._-]+$'; then
-            echo "::error::SSH_HOST no parece una IP o dominio válido"; exit 1
-          fi
-          if ! printf '%s' "$SSH_USER" | grep -qE '^[A-Za-z0-9._-]+$'; then
-            echo "::error::SSH_USER no parece un usuario válido"; exit 1
+            echo "::error::SERVER_HOST no parece una IP o dominio válido"; exit 1
           fi
           case "$SSH_PORT" in
-            ''|*[!0-9]*) echo "::error::SSH_PORT debe ser un puerto numérico"; exit 1 ;;
+            ''|*[!0-9]*) echo "::error::SERVER_PORT debe ser un puerto numérico"; exit 1 ;;
           esac
 
-          echo "SITE_URL=${SITE_URL%/}" >> "$GITHUB_ENV"
-          echo "API_BASE_URL=${SITE_URL%/}/api" >> "$GITHUB_ENV"
-          echo "KEY=$RUNNER_TEMP/recibo-box-deploy.key" >> "$GITHUB_ENV"
-          echo "SSH_BASE=ssh -i $RUNNER_TEMP/recibo-box-deploy.key -p $SSH_PORT -o StrictHostKeyChecking=accept-new -o BatchMode=yes" >> "$GITHUB_ENV"
+          echo "KEY=$RUNNER_TEMP/yobusco-deploy.key" >> "$GITHUB_ENV"
+          echo "SSH_BASE=ssh -i $RUNNER_TEMP/yobusco-deploy.key -p $SSH_PORT -o StrictHostKeyChecking=accept-new -o BatchMode=yes" >> "$GITHUB_ENV"
 
       - name: Instalar clave SSH y probar conexión
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SERVER_HOST }}
+          SSH_USER: ${{ secrets.SERVER_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -102,97 +86,123 @@ jobs:
           printf '%s\n' "$SSH_PRIVATE_KEY" > "$KEY"
 
           if ! ssh-keygen -y -P "" -f "$KEY" > /dev/null 2>&1; then
-            echo "::error::SSH_PRIVATE_KEY no es una clave privada válida o tiene passphrase. Genera una sin passphrase (ssh-keygen -t ed25519 -N '') y pega el archivo completo (ver README)."
+            echo "::error::SERVER_SSH_KEY no es una clave privada válida o tiene passphrase."
             exit 1
           fi
 
           ${SSH_BASE} "$SSH_USER@$SSH_HOST" '
             echo "SSH ok: $(hostname)"
-            command -v rsync > /dev/null 2>&1 || echo "::warning::rsync no está instalado en el servidor (sudo apt install rsync)"
-            command -v pm2   > /dev/null 2>&1 || echo "::notice::pm2 no está instalado en el servidor todavía (README: Preparación del VPS)"
+            command -v rsync > /dev/null 2>&1 || echo "::warning::rsync no está instalado en el servidor"
+            command -v pm2   > /dev/null 2>&1 || echo "::warning::pm2 no está instalado en el servidor"
           '
 
-      - name: Instalar dependencias (workspaces)
+      # 2. Configurar Node.js y caché de npm
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # -----------------------------------------------------------------
+      # PASOS DE COMPILACIÓN (BUILD)
+      # -----------------------------------------------------------------
+
+      - name: Instalar dependencias globales del monorepo
         run: npm ci
 
-      - name: Inyectar URL de la API en angular.json (define)
+      - name: Build Angular Website
+        if: steps.changes.outputs.angular == 'true'
+        working-directory: ./angular
         run: |
-          node - <<'NODE'
-          const fs = require('fs');
-          const file = 'frontend/angular.json';
-          const json = JSON.parse(fs.readFileSync(file, 'utf8'));
-          const cfg = json.projects['recibo-box'].architect.build.configurations.production;
-          if (!cfg) throw new Error('No existe la configuración production en angular.json');
-          cfg.define = { APP_API_BASE: JSON.stringify(process.env.API_BASE_URL) };
-          fs.writeFileSync(file, JSON.stringify(json, null, 2) + '\n');
-          NODE
+          npm ci
+          npm run build:staging
 
-      - name: Build backend y frontend
+      - name: Build NestJS API
+        if: steps.changes.outputs.api == 'true'
+        working-directory: ./nest
         run: |
-          npm run build:backend
-          npm run build:frontend
+          npm ci
+          npm run build
 
-      - name: Instalar dependencias de producción (runtime)
-        # Reemplaza node_modules por la versión prod-only que viaja al servidor
-        run: npm ci --omit=dev
-
-      - name: Armar paquete de deploy (espejo del APP_DIR)
+      - name: Build Angular Dashboard
+        if: steps.changes.outputs.workspace == 'true'
+        working-directory: ./yobusco-angular-backoffice
         run: |
-          set -euo pipefail
-          rm -rf deploy-out
-          mkdir -p deploy-out/web deploy-out/backend/sql
+          npm ci
+          npx ng build --configuration production --base-href /dash/
 
-          if [ ! -d frontend/dist/recibo-box/browser ]; then
-            echo "::error::Falta frontend/dist/recibo-box/browser (revisa la salida del build)"
-            exit 1
-          fi
-          cp -a frontend/dist/recibo-box/browser/. deploy-out/web/
+      # -----------------------------------------------------------------
+      # PREPARACIÓN DE CARPETAS EN EL SERVIDOR Y RSYNC
+      # -----------------------------------------------------------------
 
-          cp -a backend/dist deploy-out/backend/dist
-          cp backend/ecosystem.config.js backend/package.json deploy-out/backend/
-          cp backend/.env.example deploy-out/backend/
-          cp backend/sql/schema.sql backend/sql/setup-user.sql deploy-out/backend/sql/
-
-          # Dependencias de producción (install con workspaces): la API corre
-          # desde {APP_DIR}/backend y resuelve módulos subiendo a
-          # {APP_DIR}/node_modules. backend/node_modules solo existe si hay
-          # versiones en conflicto con el frontend.
-          cp -a node_modules deploy-out/node_modules
-          if [ -d backend/node_modules ]; then
-            cp -a backend/node_modules deploy-out/backend/node_modules
-          fi
-
-          echo "--- web/ ---";    find deploy-out/web -type f | head -10
-          echo "--- backend/ ---"; find deploy-out/backend -type f | sort
-          echo "node_modules: $(du -sh deploy-out/node_modules | cut -f1)"
-
-      - name: Crear carpetas en el servidor (primer deploy)
+      - name: Crear estructura de directorios en el servidor
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-        run: ${SSH_BASE} "$SSH_USER@$SSH_HOST" "mkdir -p '$APP_DIR'"
-
-      - name: Sincronizar paquete (rsync)
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SERVER_HOST }}
+          SSH_USER: ${{ secrets.SERVER_USER }}
         run: |
-          rsync -a --delete \
-            --exclude '.env' \
-            --exclude 'logs/' \
-            --exclude 'tmp/' \
-            -e "$SSH_BASE" \
-            deploy-out/ "${SSH_USER}@${SSH_HOST}:${APP_DIR}/"
+          ${SSH_BASE} "$SSH_USER@$SSH_HOST" "mkdir -p '$APP_DIR/website' '$APP_DIR/backend' '$APP_DIR/dash'"
 
-      - name: pm2 reload + health check (en el servidor)
+      - name: Sincronizar Website Angular (si cambió)
+        if: steps.changes.outputs.angular == 'true'
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-        run: ${SSH_BASE} "$SSH_USER@$SSH_HOST" "bash -s -- '$APP_DIR'" < deploy/server-deploy.sh
-
-      - name: Resumen
+          SSH_HOST: ${{ secrets.SERVER_HOST }}
+          SSH_USER: ${{ secrets.SERVER_USER }}
         run: |
-          echo "✔ Deploy completado (rama ${{ github.ref_name }}, commit ${{ github.sha }})"
-          echo "   Web : $SITE_URL/"
-          echo "   API : $API_BASE_URL/health"
-          echo "   pm2 : recibo-box-api recargado; nginx sirve la web y proxyea /api"
+          rsync -avz --delete -e "$SSH_BASE" \
+            ./angular/dist/ \
+            "${SSH_USER}@${SSH_HOST}:${APP_DIR}/website/"
+
+      - name: Sincronizar API NestJS (si cambió)
+        if: steps.changes.outputs.api == 'true'
+        env:
+          SSH_HOST: ${{ secrets.SERVER_HOST }}
+          SSH_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          rsync -avz --delete --no-perms --exclude 'node_modules' -e "$SSH_BASE" \
+            ./nest/dist/ \
+            ./nest/package.json \
+            ./nest/package-lock.json \
+            "${SSH_USER}@${SSH_HOST}:${APP_DIR}/backend/"
+
+      - name: Sincronizar Dashboard (si cambió)
+        if: steps.changes.outputs.workspace == 'true'
+        env:
+          SSH_HOST: ${{ secrets.SERVER_HOST }}
+          SSH_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          rsync -avz --delete -e "$SSH_BASE" \
+            ./yobusco-angular-backoffice/dist/johana-angular/browser/ \
+            "${SSH_USER}@${SSH_HOST}:${APP_DIR}/dash/"
+
+      # -----------------------------------------------------------------
+      # INSTALACIÓN Y REINICIO DE SERVICIOS EN EL SERVIDOR
+      # -----------------------------------------------------------------
+
+      - name: Restart Services with PM2
+        if: steps.changes.outputs.api == 'true' || steps.changes.outputs.angular == 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          script: |
+            set -e
+
+            # Cargar NVM y Node.js en la sesión SSH no interactiva
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+
+            # 1. Si hubo cambios en la API NestJS, instalar dependencias de producción
+            if [ "${{ steps.changes.outputs.api }}" = "true" ]; then
+              cd /var/www/html/yobusco/backend
+              npm install --omit=dev
+            fi
+
+            # 2. Ir a la raíz del servidor donde se encuentra ecosystem.config.js
+            cd /var/www/html/yobusco
+
+            # 3. Recargar/Reiniciar los procesos de PM2
+            pm2 reload ecosystem.config.js || pm2 restart ecosystem.config.js
+            pm2 save

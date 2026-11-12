@@ -39,6 +39,8 @@ CREATE TABLE receipts (
   amount_bs         DECIMAL(14,2)     NOT NULL DEFAULT 0.00 COMMENT 'Monto en Bolívares',
   amount_usd        DECIMAL(14,2)     NOT NULL DEFAULT 0.00 COMMENT 'Monto en Dólares',
   exchange_rate     DECIMAL(12,4)     NULL COMMENT 'Tasa de cambio Bs/USD aplicada',
+  amount_eur        DECIMAL(14,2)     NOT NULL DEFAULT 0.00 COMMENT 'Monto en Euros',
+  exchange_rate_eur DECIMAL(12,4)     NULL COMMENT 'Tasa de cambio Bs/EUR aplicada',
 
   iva_rate          DECIMAL(5,2)      NOT NULL DEFAULT 16.00 COMMENT '% IVA (calculado sobre Bs.)',
   iva_amount        DECIMAL(14,2)     GENERATED ALWAYS AS (ROUND(amount_bs * iva_rate / 100, 2)) STORED,

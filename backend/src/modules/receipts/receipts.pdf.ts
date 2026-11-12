@@ -60,20 +60,25 @@ export async function renderReceiptPdf(r: ReceiptFlat): Promise<Buffer> {
       size: 10,
     });
 
-    // Montos (alineados a la derecha)
-    put('Monto', y0 + 206, { size: 7.5, color: GRAY });
-    put(`${money(r.amount_bs)} Bs.`, y0 + 204, { bold: true, align: 'right' });
-    put('Monto USD', y0 + 224, { size: 7.5, color: GRAY });
-    put(`${money(r.amount_usd)} USD · Tasa ${rate(r.exchange_rate)}`, y0 + 222, {
-      bold: true,
-      align: 'right',
-    });
-    put(`IVA ${r.iva_rate}%`, y0 + 242, { size: 7.5, color: GRAY });
-    put(`${money(r.iva_amount)} Bs.`, y0 + 240, { bold: true, align: 'right' });
+    // Montos en Bolívares (no refleja USD ni EUR en el recibo emitido)
+    const hasIva = Number(r.iva_rate) > 0;
+    if (hasIva) {
+      put('Monto', y0 + 210, { size: 7.5, color: GRAY });
+      put(`${money(r.amount_bs)} Bs.`, y0 + 208, { bold: true, align: 'right' });
+      put(`IVA ${r.iva_rate}%`, y0 + 232, { size: 7.5, color: GRAY });
+      put(`${money(r.iva_amount)} Bs.`, y0 + 230, { bold: true, align: 'right' });
 
-    line(y0 + 262, '#334155', 1);
-    put('Total recibido', y0 + 274, { size: 8, bold: true, color: GRAY, tracking: 0.5 });
-    put(`${money(r.total_received)} Bs.`, y0 + 270, { bold: true, size: 13, align: 'right' });
+      line(y0 + 254, '#334155', 1);
+      put('Total recibido', y0 + 266, { size: 8, bold: true, color: GRAY, tracking: 0.5 });
+      put(`${money(r.total_received)} Bs.`, y0 + 262, { bold: true, size: 13, align: 'right' });
+    } else {
+      put('Monto', y0 + 220, { size: 7.5, color: GRAY });
+      put(`${money(r.amount_bs)} Bs.`, y0 + 218, { bold: true, align: 'right' });
+
+      line(y0 + 248, '#334155', 1);
+      put('Total recibido', y0 + 260, { size: 8, bold: true, color: GRAY, tracking: 0.5 });
+      put(`${money(r.total_received)} Bs.`, y0 + 256, { bold: true, size: 13, align: 'right' });
+    }
 
     // Referencia bancaria
     put('Referencia de pago bancario', y0 + 306, { size: 7.5, color: GRAY });

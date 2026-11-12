@@ -15,8 +15,8 @@ export class Receipt {
   @PrimaryGeneratedColumn({ type: 'int', unsigned: true })
   id!: number;
 
-  /** N.º incremental: lo asigna el trigger trg_receipts_number (BD). */
-  @Column({ name: 'receipt_number', type: 'int', unsigned: true, insert: false, update: false })
+  /** N.º incremental de recibo. */
+  @Column({ name: 'receipt_number', type: 'int', unsigned: true })
   receipt_number!: number;
 
   @ManyToOne(() => Tenant, { onDelete: 'RESTRICT', onUpdate: 'CASCADE' })
@@ -39,9 +39,15 @@ export class Receipt {
   amount_usd!: number;
 
   @Column({ name: 'exchange_rate', type: 'decimal', precision: 12, scale: 4, nullable: true })
-  exchange_rate!: number;
+  exchange_rate!: number | null;
 
-  @Column({ name: 'iva_rate', type: 'decimal', precision: 5, scale: 2 })
+  @Column({ name: 'amount_eur', type: 'decimal', precision: 14, scale: 2, default: 0 })
+  amount_eur!: number;
+
+  @Column({ name: 'exchange_rate_eur', type: 'decimal', precision: 12, scale: 4, nullable: true })
+  exchange_rate_eur!: number | null;
+
+  @Column({ name: 'iva_rate', type: 'decimal', precision: 5, scale: 2, default: 16 })
   iva_rate!: number;
 
   /** Columnas generadas en BD (STORED): solo lectura. */

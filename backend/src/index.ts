@@ -6,6 +6,7 @@ import { AppDataSource } from './config/database';
 import { AppError } from './config/errors';
 import { tenantsRoutes } from './modules/tenants/tenants.routes';
 import { receiptsRoutes } from './modules/receipts/receipts.routes';
+import { ratesRoutes } from './modules/rates/rates.routes';
 
 /**
  * Prefijos bajo los que se monta la API.
@@ -37,6 +38,7 @@ function buildApp(): Express {
   for (const prefix of apiPrefixes()) {
     app.use(`${prefix}/tenants`, tenantsRoutes());
     app.use(`${prefix}/receipts`, receiptsRoutes());
+    app.use(`${prefix}/rates`, ratesRoutes());
     app.get(`${prefix}/health`, (_req: Request, res: Response) => res.json({ ok: true }));
   }
 

@@ -59,25 +59,39 @@ export class WhatsappService {
     return data.id;
   }
 
-  private summary(r: ReceiptFlat): string {
-    return [
+  private summary(r: ReceiptFlat, isAdmin = false): string {
+    const lines = [
       `🧾 *Recibo N.º ${String(r.receipt_number).padStart(6, '0')}* — ${ES_MONTHS[r.period_month - 1]} ${r.period_year}`,
       `Recibido de: ${r.tenant_name} (Local ${r.local_number})`,
-      `Monto: ${money(r.amount_bs)} Bs. (${money(r.amount_usd)} USD @ ${rate(r.exchange_rate)})`,
-      `IVA ${r.iva_rate}%: ${money(r.iva_amount)} Bs.`,
-      `*TOTAL RECIBIDO: ${money(r.total_received)} Bs.*`,
-      r.payment_reference ? `Ref. bancaria: ${r.payment_reference}` : null,
-    ]
-      .filter(Boolean)
-      .join('\n');
+      `Monto: ${money(r.amount_bs)} Bs.`,
+    ];
+
+    if (isAdmin && (r.amount_usd > 0 || r.amount_eur > 0)) {
+      const parts = [];
+      if (r.amount_usd > 0) parts.push(`${money(r.amount_usd)} USD @ ${rate(r.exchange_rate ?? 0)}`);
+      if (r.amount_eur > 0) parts.push(`${money(r.amount_eur)} EUR @ ${rate(r.exchange_rate_eur ?? 0)}`);
+      lines.push(`Detalle monedas: ${parts.join(' · ')}`);
+    }
+
+    if (Number(r.iva_rate) > 0) {
+      lines.push(`IVA ${r.iva_rate}%: ${money(r.iva_amount)} Bs.`);
+    }
+
+    lines.push(`*TOTAL RECIBIDO: ${money(r.total_received)} Bs.*`);
+
+    if (r.payment_reference) {
+      lines.push(`Ref. bancaria: ${r.payment_reference}`);
+    }
+
+    return lines.join('\n');
   }
 
   async sendReceipt(r: ReceiptFlat, pdf: Buffer): Promise<void> {
     this.assertConfigured();
-    const text = this.summary(r);
+    const text = this.summary(r, false);
     const filename = `recibo-${String(r.receipt_number).padStart(6, '0')}.pdf`;
 
-    // 1) Al inquilino: documento PDF dual + caption con el detalle
+    // 1) Al inquilino: documento PDF dual + caption con el detalle (solo en Bs)
     const mediaId = await this.uploadPdf(pdf, filename);
     await this.messages({
       messaging_product: 'whatsapp',
@@ -87,14 +101,15 @@ export class WhatsappService {
       document: { id: mediaId, filename, caption: text },
     });
 
-    // 2) Copia al administrador (resumen en texto)
+    // 2) Copia al administrador (resumen en texto con detalle de divisas si aplica)
     if (this.admin && this.admin !== r.phone) {
+      const adminText = this.summary(r, true);
       await this.messages({
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
         to: this.admin,
         type: 'text',
-        text: { body: `📋 Copia · administración\n\n${text}` },
+        text: { body: `📋 Copia · administración\n\n${adminText}` },
       });
     }
   }

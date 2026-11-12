@@ -16,7 +16,9 @@ export interface ReceiptFlat {
   issue_date: string;
   amount_bs: number;
   amount_usd: number;
-  exchange_rate: number;
+  exchange_rate: number | null;
+  amount_eur: number;
+  exchange_rate_eur: number | null;
   iva_rate: number;
   iva_amount: number;
   total_received: number;
@@ -43,6 +45,8 @@ function flat(r: Receipt): ReceiptFlat {
     amount_bs: r.amount_bs,
     amount_usd: r.amount_usd,
     exchange_rate: r.exchange_rate,
+    amount_eur: r.amount_eur ?? 0,
+    exchange_rate_eur: r.exchange_rate_eur ?? null,
     iva_rate: r.iva_rate,
     iva_amount: r.iva_amount,
     total_received: r.total_received,
@@ -75,21 +79,35 @@ export class ReceiptService {
     period_year: number;
     issue_date: string;
     amount_bs: number;
-    amount_usd: number;
-    exchange_rate: number;
+    amount_usd?: number;
+    exchange_rate?: number | null;
+    amount_eur?: number;
+    exchange_rate_eur?: number | null;
+    iva_rate?: number;
     payment_reference?: string | null;
   }): Promise<ReceiptFlat> {
     const tenant = await AppDataSource.getRepository(Tenant).findOneBy({ id: input.tenant_id });
     if (!tenant) throw new AppError(404, 'Inquilino no encontrado');
 
+    // Obtener siguiente número incremental de recibo (evita depender de triggers frágiles)
+    const maxRow = await this.repo()
+      .createQueryBuilder('r')
+      .select('MAX(r.receipt_number)', 'max')
+      .getRawOne();
+    const nextNumber = (Number(maxRow?.max) || 0) + 1;
+
     const r = await this.repo().save({
+      receipt_number: nextNumber,
       tenant: { id: input.tenant_id },
       period_month: input.period_month,
       period_year: input.period_year,
       issue_date: input.issue_date,
       amount_bs: input.amount_bs,
-      amount_usd: input.amount_usd,
-      exchange_rate: input.exchange_rate,
+      amount_usd: input.amount_usd ?? 0,
+      exchange_rate: input.exchange_rate ?? null,
+      amount_eur: input.amount_eur ?? 0,
+      exchange_rate_eur: input.exchange_rate_eur ?? null,
+      iva_rate: input.iva_rate ?? 16,
       payment_reference: input.payment_reference ?? null,
     });
 

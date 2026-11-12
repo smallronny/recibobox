@@ -154,7 +154,6 @@ jobs:
             "${SSH_USER}@${SSH_HOST}:${APP_DIR}/backend/dist/"
           rsync -avz -e "$SSH_BASE" \
             ./backend/package.json \
-            ./backend/package-lock.json \
             "${SSH_USER}@${SSH_HOST}:${APP_DIR}/backend/"
 
       # -----------------------------------------------------------------

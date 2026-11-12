@@ -20,7 +20,7 @@ jobs:
 
     env:
       SITE_URL: ${{ vars.SITE_URL }}
-      APP_DIR: ${{ vars.SERVER_APP_DIR || '/var/www/html/yobusco' }}
+      APP_DIR: ${{ vars.SERVER_APP_DIR || '/var/www/html/recibobox' }}
       SSH_PORT: ${{ secrets.SERVER_PORT || '22' }}
 
     steps:
@@ -33,10 +33,10 @@ jobs:
         uses: dorny/paths-filter@v3
         with:
           filters: |
-            angular:
-              - 'angular/**'
-            api:
-              - 'nest/**'
+            frontend:
+              - 'frontend/**'
+            backend:
+              - 'backend/**'
 
       - name: Chequeo de variables y secretos
         env:
@@ -69,8 +69,8 @@ jobs:
             ''|*[!0-9]*) echo "::error::SERVER_PORT debe ser un puerto numérico"; exit 1 ;;
           esac
 
-          echo "KEY=$RUNNER_TEMP/yobusco-deploy.key" >> "$GITHUB_ENV"
-          echo "SSH_BASE=ssh -i $RUNNER_TEMP/yobusco-deploy.key -p $SSH_PORT -o StrictHostKeyChecking=accept-new -o BatchMode=yes" >> "$GITHUB_ENV"
+          echo "KEY=$RUNNER_TEMP/recibobox-deploy.key" >> "$GITHUB_ENV"
+          echo "SSH_BASE=ssh -i $RUNNER_TEMP/recibobox-deploy.key -p $SSH_PORT -o StrictHostKeyChecking=accept-new -o BatchMode=yes" >> "$GITHUB_ENV"
 
       - name: Instalar clave SSH y probar conexión
         env:
@@ -108,16 +108,16 @@ jobs:
       - name: Instalar dependencias globales del repositorio
         run: npm ci
 
-      - name: Build Angular Website
-        if: steps.changes.outputs.angular == 'true'
-        working-directory: ./angular
+      - name: Build frontend Website
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: ./frontend
         run: |
           npm ci
-          npm run build:staging
+          CI=true npm run build
 
-      - name: Build NestJS API
-        if: steps.changes.outputs.api == 'true'
-        working-directory: ./nest
+      - name: Build backend
+        if: steps.changes.outputs.backend == 'true'
+        working-directory: ./backend
         run: |
           npm ci
           npm run build
@@ -131,28 +131,30 @@ jobs:
           SSH_HOST: ${{ secrets.SERVER_HOST }}
           SSH_USER: ${{ secrets.SERVER_USER }}
         run: |
-          ${SSH_BASE} "$SSH_USER@$SSH_HOST" "mkdir -p '$APP_DIR/website' '$APP_DIR/backend'"
+          ${SSH_BASE} "$SSH_USER@$SSH_HOST" "mkdir -p '$APP_DIR/frontend/browser' '$APP_DIR/backend/dist'"
 
-      - name: Sincronizar Website Angular (si cambió)
-        if: steps.changes.outputs.angular == 'true'
+      - name: Sincronizar Frontend (si cambió)
+        if: steps.changes.outputs.frontend == 'true'
         env:
           SSH_HOST: ${{ secrets.SERVER_HOST }}
           SSH_USER: ${{ secrets.SERVER_USER }}
         run: |
           rsync -avz --delete -e "$SSH_BASE" \
-            ./angular/dist/ \
-            "${SSH_USER}@${SSH_HOST}:${APP_DIR}/website/"
+            ./frontend/dist/recibo-box/browser/ \
+            "${SSH_USER}@${SSH_HOST}:${APP_DIR}/frontend/browser/"
 
-      - name: Sincronizar API NestJS (si cambió)
-        if: steps.changes.outputs.api == 'true'
+      - name: Sincronizar Backend (si cambió)
+        if: steps.changes.outputs.backend == 'true'
         env:
           SSH_HOST: ${{ secrets.SERVER_HOST }}
           SSH_USER: ${{ secrets.SERVER_USER }}
         run: |
-          rsync -avz --delete --no-perms --exclude 'node_modules' -e "$SSH_BASE" \
-            ./nest/dist/ \
-            ./nest/package.json \
-            ./nest/package-lock.json \
+          rsync -avz --delete -e "$SSH_BASE" \
+            ./backend/dist/ \
+            "${SSH_USER}@${SSH_HOST}:${APP_DIR}/backend/dist/"
+          rsync -avz -e "$SSH_BASE" \
+            ./backend/package.json \
+            ./backend/package-lock.json \
             "${SSH_USER}@${SSH_HOST}:${APP_DIR}/backend/"
 
       # -----------------------------------------------------------------
@@ -160,7 +162,7 @@ jobs:
       # -----------------------------------------------------------------
 
       - name: Restart Services with PM2
-        if: steps.changes.outputs.api == 'true' || steps.changes.outputs.angular == 'true'
+        if: steps.changes.outputs.backend == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -175,15 +177,13 @@ jobs:
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
             [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 
-            # 1. Si hubo cambios en la API NestJS, instalar dependencias de producción
-            if [ "${{ steps.changes.outputs.api }}" = "true" ]; then
-              cd ${{ env.APP_DIR }}/backend
-              npm install --omit=dev
-            fi
+            # 1. Si hubo cambios en el backend, instalar dependencias de producción
+            cd ${{ env.APP_DIR }}/backend
+            npm install --omit=dev
 
             # 2. Ir a la raíz del servidor donde se encuentra ecosystem.config.js
             cd ${{ env.APP_DIR }}
 
-            # 3. Recargar/Reiniciar los procesos de PM2
-            pm2 reload ecosystem.config.js || pm2 restart ecosystem.config.js
+            # 3. Recargar/Reiniciar el backend en PM2 con variables actualizadas
+            pm2 restart ecosystem.config.js --update-env || pm2 reload ecosystem.config.js --update-env
             pm2 save

@@ -147,6 +147,90 @@ export class AuthService {
     };
   }
 
+  // --- CAMBIAR CONTRASEÑA DE USUARIO LOGUEADO ---
+  async changePassword(userId: number, currentPassword: string, newPassword: string): Promise<void> {
+    const user = await this.repo().findOneBy({ id: userId });
+    if (!user || !user.is_active) throw new AppError(404, 'Usuario no encontrado');
+
+    const isValid = this.verifyPassword(currentPassword, user.password_hash, user.password_salt);
+    if (!isValid) {
+      throw new AppError(400, 'La contraseña actual no es correcta');
+    }
+
+    if (!newPassword || newPassword.trim().length < 6) {
+      throw new AppError(400, 'La nueva contraseña debe tener al menos 6 caracteres');
+    }
+
+    const { hash, salt } = this.hashPassword(newPassword.trim());
+    user.password_hash = hash;
+    user.password_salt = salt;
+    await this.repo().save(user);
+  }
+
+  // --- ADMINISTRACIÓN: RESTABLECER CONTRASEÑA DIRECTAMENTE ---
+  async adminSetPassword(usernameOrEmail: string, newPassword: string): Promise<void> {
+    const user = await this.repo().findOne({
+      where: [{ username: usernameOrEmail }, { email: usernameOrEmail }],
+    });
+    if (!user) throw new AppError(404, `Usuario "${usernameOrEmail}" no encontrado`);
+
+    if (!newPassword || newPassword.trim().length < 6) {
+      throw new AppError(400, 'La nueva contraseña debe tener al menos 6 caracteres');
+    }
+
+    const { hash, salt } = this.hashPassword(newPassword.trim());
+    user.password_hash = hash;
+    user.password_salt = salt;
+    await this.repo().save(user);
+  }
+
+  // --- ADMINISTRACIÓN: CREAR NUEVO USUARIO ---
+  async createUser(data: {
+    username: string;
+    email: string;
+    password: string;
+    role?: UserRole;
+  }): Promise<UserResponse> {
+    const existing = await this.repo().findOne({
+      where: [{ username: data.username }, { email: data.email }],
+    });
+    if (existing) {
+      throw new AppError(400, 'El nombre de usuario o correo ya se encuentra registrado');
+    }
+
+    if (!data.password || data.password.trim().length < 6) {
+      throw new AppError(400, 'La contraseña debe tener al menos 6 caracteres');
+    }
+
+    const { hash, salt } = this.hashPassword(data.password.trim());
+    const user = await this.repo().save({
+      username: data.username.trim().toLowerCase(),
+      email: data.email.trim().toLowerCase(),
+      password_hash: hash,
+      password_salt: salt,
+      role: data.role || 'operador',
+      is_active: true,
+    });
+
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+    };
+  }
+
+  // --- ADMINISTRACIÓN: LISTAR USUARIOS ---
+  async listUsers(): Promise<UserResponse[]> {
+    const users = await this.repo().find({ order: { id: 'ASC' } });
+    return users.map(u => ({
+      id: u.id,
+      username: u.username,
+      email: u.email,
+      role: u.role,
+    }));
+  }
+
   // --- AUTO-SEED DE ADMINISTRADOR INICIAL ---
   async ensureInitialAdmin(): Promise<void> {
     try {

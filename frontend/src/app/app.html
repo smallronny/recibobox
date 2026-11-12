@@ -25,6 +25,15 @@
           </span>
           <button
             type="button"
+            (click)="openPasswordModal()"
+            class="text-xs font-medium text-slate-600 hover:text-blue-600 transition-colors underline"
+            title="Cambiar contraseña de acceso"
+          >
+            Cambiar contraseña
+          </button>
+          <span class="text-slate-300">|</span>
+          <button
+            type="button"
             (click)="logout()"
             class="text-xs font-medium text-slate-500 hover:text-red-600 transition-colors underline"
           >
@@ -34,7 +43,103 @@
       }
     </nav>
   </header>
+
   <main class="mx-auto max-w-4xl w-full py-8 px-4 flex-1">
     <router-outlet />
   </main>
+
+  <!-- Modal para cambiar contraseña -->
+  @if (showPasswordModal()) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+      <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl border border-slate-200">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+          <h2 class="text-lg font-bold text-slate-900">Cambiar Contraseña</h2>
+          <button
+            type="button"
+            (click)="closePasswordModal()"
+            class="text-slate-400 hover:text-slate-600 text-lg leading-none"
+          >
+            &times;
+          </button>
+        </div>
+
+        @if (passwordError()) {
+          <div class="mb-4 rounded-lg bg-red-50 p-3 text-xs font-medium text-red-700 border border-red-200">
+            {{ passwordError() }}
+          </div>
+        }
+
+        @if (passwordSuccess()) {
+          <div class="mb-4 rounded-lg bg-emerald-50 p-3 text-xs font-medium text-emerald-700 border border-emerald-200">
+            {{ passwordSuccess() }}
+          </div>
+        }
+
+        <form [formGroup]="passwordForm" (ngSubmit)="submitChangePassword()" class="space-y-4">
+          <div>
+            <label for="currentPassword" class="block text-xs font-semibold text-slate-700">Contraseña actual</label>
+            <input
+              id="currentPassword"
+              type="password"
+              formControlName="currentPassword"
+              placeholder="••••••••"
+              class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            @if (passwordForm.controls.currentPassword.touched && passwordForm.controls.currentPassword.invalid) {
+              <p class="mt-1 text-xs text-red-600">La contraseña actual es requerida.</p>
+            }
+          </div>
+
+          <div>
+            <label for="newPassword" class="block text-xs font-semibold text-slate-700">Nueva contraseña (mínimo 6 caracteres)</label>
+            <input
+              id="newPassword"
+              type="password"
+              formControlName="newPassword"
+              placeholder="••••••••"
+              class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            @if (passwordForm.controls.newPassword.touched && passwordForm.controls.newPassword.invalid) {
+              <p class="mt-1 text-xs text-red-600">Debe tener al menos 6 caracteres.</p>
+            }
+          </div>
+
+          <div>
+            <label for="confirmPassword" class="block text-xs font-semibold text-slate-700">Confirmar nueva contraseña</label>
+            <input
+              id="confirmPassword"
+              type="password"
+              formControlName="confirmPassword"
+              placeholder="••••••••"
+              class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            @if (passwordForm.controls.confirmPassword.touched && passwordForm.controls.confirmPassword.invalid) {
+              <p class="mt-1 text-xs text-red-600">Por favor confirma tu contraseña.</p>
+            }
+          </div>
+
+          <div class="mt-6 flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              (click)="closePasswordModal()"
+              class="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              [disabled]="passwordSaving()"
+              class="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50"
+            >
+              @if (passwordSaving()) {
+                Guardando...
+              } @else {
+                Actualizar contraseña
+              }
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
 </div>

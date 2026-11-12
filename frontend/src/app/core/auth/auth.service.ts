@@ -46,6 +46,13 @@ export class AuthService {
     );
   }
 
+  changePassword(currentPassword: string, newPassword: string): Observable<{ ok: boolean; message: string }> {
+    return this.http.post<{ ok: boolean; message: string }>(`${API_BASE}/auth/change-password`, {
+      current_password: currentPassword,
+      new_password: newPassword,
+    });
+  }
+
   logout(): void {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(TOKEN_KEY);

@@ -6,7 +6,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p .",
     "start": "node dist/index.js",
-    "db:init": "mysql -u root -p < sql/schema.sql"
+    "db:init": "mysql -u root -p < sql/schema.sql",
+    "user": "node dist/scripts/manage-user.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

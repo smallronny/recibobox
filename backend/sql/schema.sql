@@ -7,9 +7,27 @@ CREATE DATABASE IF NOT EXISTS recibo_box
 USE recibo_box;
 
 -- ------------------------------------------------------------
+-- users · Usuarios administradores y operadores
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS users (
+  id            INT UNSIGNED      NOT NULL AUTO_INCREMENT,
+  username      VARCHAR(50)       NOT NULL COMMENT 'Nombre de usuario único para acceso',
+  email         VARCHAR(100)      NOT NULL COMMENT 'Correo electrónico del usuario',
+  password_hash VARCHAR(255)      NOT NULL COMMENT 'Hash seguro de contraseña (scrypt)',
+  password_salt VARCHAR(64)       NOT NULL COMMENT 'Salt criptográfico',
+  role          ENUM('admin', 'operador') NOT NULL DEFAULT 'admin' COMMENT 'Rol con permisos',
+  is_active     TINYINT(1)        NOT NULL DEFAULT 1 COMMENT '1 = Activo, 0 = Inactivo',
+  created_at    TIMESTAMP         NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_user_username (username),
+  UNIQUE KEY uq_user_email (email)
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
 -- tenants · Inquilinos
 -- ------------------------------------------------------------
-CREATE TABLE tenants (
+CREATE TABLE IF NOT EXISTS tenants (
   id            INT UNSIGNED      NOT NULL AUTO_INCREMENT,
   full_name     VARCHAR(150)      NOT NULL COMMENT 'Nombres y apellidos o razón social',
   doc_type      ENUM('V','E','J','G','R') NOT NULL DEFAULT 'V' COMMENT 'Tipo de documento/RIF',
@@ -28,7 +46,7 @@ CREATE TABLE tenants (
 -- ------------------------------------------------------------
 -- receipts · Recibos de pago
 -- ------------------------------------------------------------
-CREATE TABLE receipts (
+CREATE TABLE IF NOT EXISTS receipts (
   id                INT UNSIGNED      NOT NULL AUTO_INCREMENT,
   receipt_number    INT UNSIGNED      NOT NULL DEFAULT 0 COMMENT 'N.º de recibo incremental automático (trigger)',
   tenant_id         INT UNSIGNED      NOT NULL,
@@ -65,7 +83,7 @@ CREATE TABLE receipts (
 -- Trigger: asigna receipt_number (= id) si no se envía
 -- ------------------------------------------------------------
 DELIMITER //
-CREATE TRIGGER trg_receipts_number BEFORE INSERT ON receipts
+CREATE TRIGGER IF NOT EXISTS trg_receipts_number BEFORE INSERT ON receipts
 FOR EACH ROW
 BEGIN
   IF NEW.receipt_number = 0 THEN

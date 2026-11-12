@@ -7,18 +7,15 @@ import { AppError } from './config/errors';
 import { tenantsRoutes } from './modules/tenants/tenants.routes';
 import { receiptsRoutes } from './modules/receipts/receipts.routes';
 import { ratesRoutes } from './modules/rates/rates.routes';
+import { authRoutes } from './modules/auth/auth.routes';
+import { requireAuth } from './modules/auth/auth.middleware';
+import { AuthService } from './modules/auth/auth.service';
 
 /**
  * Prefijos bajo los que se monta la API.
  *
  * - Local: /api
- * - cPanel (Passenger montando la app en un subdirectorio, ej.
- *   https://dominio.com/<carpeta>): la URL pública de cada ruta es
- *   https://dominio.com/<carpeta>/api/… y la app puede recibir la petición
- *   con el prefijo completo (/carpeta/api) o reducido (/api) según cómo
- *   Passenger exponga PASSENGER_BASE_URI. Se monta en ambos casos y —
- *   opcionalmente — también en los prefijos listados en API_PREFIXES
- *   (separados por coma).
+ * - cPanel / Nginx / Reverse Proxy: /api
  */
 function apiPrefixes(): string[] {
   const configured = (process.env.API_PREFIXES ?? '')
@@ -36,8 +33,12 @@ function buildApp(): Express {
   app.use(express.json());
 
   for (const prefix of apiPrefixes()) {
-    app.use(`${prefix}/tenants`, tenantsRoutes());
-    app.use(`${prefix}/receipts`, receiptsRoutes());
+    // Rutas públicas de autenticación (/api/auth/login, etc.)
+    app.use(`${prefix}/auth`, authRoutes());
+    // Rutas protegidas que requieren token de administrador
+    app.use(`${prefix}/tenants`, requireAuth, tenantsRoutes());
+    app.use(`${prefix}/receipts`, requireAuth, receiptsRoutes());
+    // Tasas de cambio (BCV) y estado del servidor
     app.use(`${prefix}/rates`, ratesRoutes());
     app.get(`${prefix}/health`, (_req: Request, res: Response) => res.json({ ok: true }));
   }
@@ -57,12 +58,18 @@ function buildApp(): Express {
 
 async function main(): Promise<void> {
   await AppDataSource.initialize();
+
+  // Asegura la existencia del usuario administrador inicial
+  const authService = new AuthService();
+  await authService.ensureInitialAdmin();
+
   const port = Number(process.env.PORT ?? process.env.APP_PORT ?? 3000);
   buildApp().listen(port, () => {
     console.log(`✔ API recibo-box: http://localhost:${port}/api`);
+    console.log(`  POST /api/auth/login · GET /api/auth/me`);
     console.log(`  GET health: /api/health`);
-    console.log(`  GET/POST/PUT/DELETE /api/tenants`);
-    console.log(`  GET/POST /api/receipts · GET /api/receipts/:id/pdf · POST /api/receipts/:id/whatsapp`);
+    console.log(`  GET/POST/PUT/DELETE /api/tenants [Auth]`);
+    console.log(`  GET/POST /api/receipts · GET /api/receipts/:id/pdf · POST /api/receipts/:id/whatsapp [Auth]`);
   });
 }
 

@@ -1,15 +1,40 @@
-<div class="min-h-screen bg-slate-50 text-slate-900">
-  <header class="border-b border-slate-200 bg-white">
-    <nav class="mx-auto flex max-w-3xl items-center gap-6 px-6 py-4">
-      <span class="text-lg font-semibold tracking-tight text-slate-900">recibo-box</span>
-      @for (l of links; track l.path) {
-        <a [routerLink]="l.path" class="text-sm font-medium text-slate-600 hover:text-blue-600">
-          {{ l.label }}
+<div class="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
+  <header class="border-b border-slate-200 bg-white shadow-sm">
+    <nav class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
+      <div class="flex items-center gap-6">
+        <a routerLink="/" class="text-lg font-bold tracking-tight text-slate-900 flex items-center gap-2">
+          <span class="inline-block w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+          recibo-box
         </a>
+        @if (isLoggedIn()) {
+          <div class="flex items-center gap-4">
+            @for (l of links; track l.path) {
+              <a [routerLink]="l.path" class="text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors">
+                {{ l.label }}
+              </a>
+            }
+          </div>
+        }
+      </div>
+
+      @if (isLoggedIn()) {
+        <div class="flex items-center gap-3">
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            {{ currentUser()?.username }} ({{ currentUser()?.role }})
+          </span>
+          <button
+            type="button"
+            (click)="logout()"
+            class="text-xs font-medium text-slate-500 hover:text-red-600 transition-colors underline"
+          >
+            Cerrar sesión
+          </button>
+        </div>
       }
     </nav>
   </header>
-  <main class="mx-auto max-w-3xl py-8">
+  <main class="mx-auto max-w-4xl w-full py-8 px-4 flex-1">
     <router-outlet />
   </main>
 </div>

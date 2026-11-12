@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { Tenant } from '../modules/tenants/tenant.entity';
 import { Receipt } from '../modules/receipts/receipt.entity';
+import { User } from '../modules/users/user.entity';
 
 /**
  * Estructura administrada por backend/sql/schema.sql (DDL canónico):
@@ -14,7 +15,7 @@ export const AppDataSource = new DataSource({
   username: process.env.DB_USER ?? 'root',
   password: process.env.DB_PASSWORD ?? '',
   database: process.env.DB_NAME ?? 'recibo_box',
-  entities: [Tenant, Receipt],
+  entities: [Tenant, Receipt, User],
   synchronize: false,
   migrationsRun: false,
   logging: (process.env.DB_LOGGING === '1' ? ['error', 'warn'] : ['error']) as any,

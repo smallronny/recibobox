@@ -43,8 +43,11 @@ export class ReceiptService {
 
   /** GET /api/receipts/:id/pdf?copy=dual|inquilino|propietario */
   pdfUrl(id: number, copy: 'dual' | 'inquilino' | 'propietario' = 'dual'): string {
-    return copy === 'dual'
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('recibo_box_token') : null;
+    const base = copy === 'dual'
       ? `${API_BASE}/receipts/${id}/pdf`
       : `${API_BASE}/receipts/${id}/pdf?copy=${copy}`;
+    if (!token) return base;
+    return base.includes('?') ? `${base}&token=${encodeURIComponent(token)}` : `${base}?token=${encodeURIComponent(token)}`;
   }
 }

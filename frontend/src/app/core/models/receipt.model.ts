@@ -10,7 +10,9 @@ export interface Receipt {
   issue_date: string;
   amount_bs: number;
   amount_usd: number;
-  exchange_rate: number;
+  exchange_rate: number | null;
+  amount_eur: number;
+  exchange_rate_eur: number | null;
   iva_rate: number;
   iva_amount: number;
   total_received: number;
@@ -25,9 +27,19 @@ export interface CreateReceiptDto {
   period_year: number;
   issue_date: string;
   amount_bs: number;
-  amount_usd: number;
-  exchange_rate: number;
+  amount_usd?: number;
+  exchange_rate?: number | null;
+  amount_eur?: number;
+  exchange_rate_eur?: number | null;
+  iva_rate?: number;
   payment_reference?: string;
+}
+
+export interface BcvRates {
+  usd: number;
+  eur: number;
+  date: string;
+  source: string;
 }
 
 export const MONTHS = [

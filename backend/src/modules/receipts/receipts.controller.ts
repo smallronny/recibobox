@@ -26,21 +26,25 @@ export class ReceiptController {
 
   pdf = async (req: Request, res: Response) => {
     const data = await this.s.byId(Number(req.params.id));
-    const buffer = await renderReceiptPdf(data);
+    const copy = (req.query.copy as 'dual' | 'inquilino' | 'propietario') || 'dual';
+    const buffer = await renderReceiptPdf(data, copy);
+    const suffix = copy === 'dual' ? '' : `-${copy}`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
-      `inline; filename="recibo-${String(data.receipt_number).padStart(6, '0')}.pdf"`,
+      `inline; filename="recibo-${String(data.receipt_number).padStart(6, '0')}${suffix}.pdf"`,
     );
     res.send(buffer);
   };
 
   whatsapp = async (req: Request, res: Response) => {
     const id = Number(req.params.id);
+    const target = (req.query.target as 'all' | 'inquilino' | 'propietario') || 'all';
     const data = await this.s.byId(id);
-    const buffer = await renderReceiptPdf(data); // PDF dual adjunto al mensaje
-    await this.wa.sendReceipt(data, buffer);
-    await this.s.markWhatsappSent(id);
-    res.json({ sent: true });
+    await this.wa.sendReceipt(data, target);
+    if (target === 'all' || target === 'inquilino') {
+      await this.s.markWhatsappSent(id);
+    }
+    res.json({ sent: true, target });
   };
 }

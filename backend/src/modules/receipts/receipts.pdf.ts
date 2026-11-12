@@ -7,9 +7,23 @@ const ML = 40;
 const MR = W - ML;
 const GRAY = '#64748b';
 
-/** PDF A4 con dos copias apiladas: ORIGINAL · INQUILINO / COPIA · PROPIETARIO. */
-export async function renderReceiptPdf(r: ReceiptFlat): Promise<Buffer> {
-  const doc = new PDFDocument({ size: 'A4', margin: 0 });
+export type ReceiptCopyType = 'dual' | 'inquilino' | 'propietario';
+
+/** 
+ * Genera el PDF del recibo:
+ * - 'dual': Hoja A4 con ambas copias (ORIGINAL · INQUILINO y COPIA · PROPIETARIO).
+ * - 'inquilino': Copia única ORIGINAL · INQUILINO (media página).
+ * - 'propietario': Copia única COPIA · PROPIETARIO (media página).
+ */
+export async function renderReceiptPdf(
+  r: ReceiptFlat,
+  copyType: ReceiptCopyType = 'dual',
+): Promise<Buffer> {
+  const isSingle = copyType !== 'dual';
+  const doc = new PDFDocument({
+    size: isSingle ? [W, 421] : 'A4',
+    margin: 0,
+  });
   const chunks: Buffer[] = [];
   doc.on('data', (b: Buffer) => chunks.push(b));
   const done = new Promise<Buffer>(resolve =>
@@ -55,34 +69,34 @@ export async function renderReceiptPdf(r: ReceiptFlat): Promise<Buffer> {
     put('Fecha de emisión', y0 + 124, { size: 7.5, color: GRAY, align: 'right' });
     put(dateES(r.issue_date), y0 + 134, { bold: true, size: 10.5, align: 'right' });
 
-    put('Concepto', y0 + 164, { size: 7.5, color: GRAY });
-    put(`Alquiler de local comercial — ${ES_MONTHS[r.period_month - 1]} ${r.period_year}`, y0 + 174, {
+    put('Concepto', y0 + 154, { size: 7.5, color: GRAY });
+    put(`Alquiler de local comercial — ${ES_MONTHS[r.period_month - 1]} ${r.period_year}`, y0 + 164, {
       size: 10,
     });
+
+    // Referencia bancaria (antes del monto)
+    put('Referencia de pago bancario', y0 + 190, { size: 7.5, color: GRAY });
+    put(r.payment_reference || '—', y0 + 200, { bold: true, size: 10.5 });
 
     // Montos en Bolívares (no refleja USD ni EUR en el recibo emitido)
     const hasIva = Number(r.iva_rate) > 0;
     if (hasIva) {
-      put('Monto', y0 + 210, { size: 7.5, color: GRAY });
-      put(`${money(r.amount_bs)} Bs.`, y0 + 208, { bold: true, align: 'right' });
-      put(`IVA ${r.iva_rate}%`, y0 + 232, { size: 7.5, color: GRAY });
-      put(`${money(r.iva_amount)} Bs.`, y0 + 230, { bold: true, align: 'right' });
+      put('Monto', y0 + 230, { size: 7.5, color: GRAY });
+      put(`${money(r.amount_bs)} Bs.`, y0 + 228, { bold: true, align: 'right' });
+      put(`IVA ${r.iva_rate}%`, y0 + 252, { size: 7.5, color: GRAY });
+      put(`${money(r.iva_amount)} Bs.`, y0 + 250, { bold: true, align: 'right' });
 
-      line(y0 + 254, '#334155', 1);
-      put('Total recibido', y0 + 266, { size: 8, bold: true, color: GRAY, tracking: 0.5 });
-      put(`${money(r.total_received)} Bs.`, y0 + 262, { bold: true, size: 13, align: 'right' });
+      line(y0 + 274, '#334155', 1);
+      put('Total recibido', y0 + 286, { size: 8, bold: true, color: GRAY, tracking: 0.5 });
+      put(`${money(r.total_received)} Bs.`, y0 + 282, { bold: true, size: 13, align: 'right' });
     } else {
-      put('Monto', y0 + 220, { size: 7.5, color: GRAY });
-      put(`${money(r.amount_bs)} Bs.`, y0 + 218, { bold: true, align: 'right' });
+      put('Monto', y0 + 238, { size: 7.5, color: GRAY });
+      put(`${money(r.amount_bs)} Bs.`, y0 + 236, { bold: true, align: 'right' });
 
-      line(y0 + 248, '#334155', 1);
-      put('Total recibido', y0 + 260, { size: 8, bold: true, color: GRAY, tracking: 0.5 });
-      put(`${money(r.total_received)} Bs.`, y0 + 256, { bold: true, size: 13, align: 'right' });
+      line(y0 + 266, '#334155', 1);
+      put('Total recibido', y0 + 278, { size: 8, bold: true, color: GRAY, tracking: 0.5 });
+      put(`${money(r.total_received)} Bs.`, y0 + 274, { bold: true, size: 13, align: 'right' });
     }
-
-    // Referencia bancaria
-    put('Referencia de pago bancario', y0 + 306, { size: 7.5, color: GRAY });
-    put(r.payment_reference || '—', y0 + 316, { bold: true, size: 10.5 });
 
     // Firmas
     line(y0 + 356, '#94a3b8', 0.75, ML, ML + 180);
@@ -97,13 +111,18 @@ export async function renderReceiptPdf(r: ReceiptFlat): Promise<Buffer> {
     });
   };
 
-  for (const [i, tag] of ['ORIGINAL · INQUILINO', 'COPIA · PROPIETARIO'].entries()) {
-    drawCopy(i * 421, tag);
+  if (copyType === 'inquilino') {
+    drawCopy(0, 'ORIGINAL · INQUILINO');
+  } else if (copyType === 'propietario') {
+    drawCopy(0, 'COPIA · PROPIETARIO');
+  } else {
+    for (const [i, tag] of ['ORIGINAL · INQUILINO', 'COPIA · PROPIETARIO'].entries()) {
+      drawCopy(i * 421, tag);
+    }
+    // Separador entre copias
+    doc.moveTo(ML, 420.5).lineTo(MR, 420.5).lineWidth(0.75).strokeColor('#cbd5e1').dash(4, { space: 4 }).stroke();
+    doc.undash();
   }
-
-  // Separador entre copias
-  doc.moveTo(ML, 420.5).lineTo(MR, 420.5).lineWidth(0.75).strokeColor('#cbd5e1').dash(4, { space: 4 }).stroke();
-  doc.undash();
 
   doc.end();
   return done;

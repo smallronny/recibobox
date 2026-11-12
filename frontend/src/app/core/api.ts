@@ -8,4 +8,8 @@
 declare const APP_API_BASE: string | undefined;
 
 export const API_BASE: string =
-  typeof APP_API_BASE === 'string' ? APP_API_BASE : 'http://localhost:3000/api';
+  typeof APP_API_BASE === 'string'
+    ? APP_API_BASE
+    : (typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? 'http://localhost:3000/api'
+        : '/api');

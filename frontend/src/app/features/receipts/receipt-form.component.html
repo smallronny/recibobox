@@ -1,7 +1,7 @@
 <div class="mx-auto max-w-2xl space-y-6 p-6">
   <header class="space-y-1">
     <h1 class="text-2xl font-semibold text-slate-800">Nuevo recibo de pago</h1>
-    <p class="text-sm text-slate-500">IVA 16% calculado sobre el monto en Bs.</p>
+    <p class="text-sm text-slate-500">Emisión en Bolívares con conversión opcional de divisas y tasa BCV.</p>
   </header>
 
   @if (error()) {
@@ -9,19 +9,44 @@
   }
 
   @if (saved(); as r) {
-    <section class="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-6">
-      <h2 class="text-lg font-semibold text-emerald-800">Recibo N.º {{ r.receipt_number }} emitido</h2>
-      <p class="text-sm text-emerald-700">
-        Total recibido: <strong>{{ r.total_received | number:'1.2-2' }} Bs.</strong>
-        · {{ r.amount_usd | number:'1.2-2' }} USD
-      </p>
-      <div class="flex gap-3 pt-1">
+    <section class="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50 p-6">
+      <div class="space-y-1">
+        <h2 class="text-lg font-semibold text-emerald-800">Recibo N.º {{ r.receipt_number }} emitido</h2>
+        <p class="text-sm text-emerald-700">
+          Total recibido: <strong>{{ r.total_received | number:'1.2-2' }} Bs.</strong>
+        </p>
+      </div>
+
+      <!-- Estado / Reintento de WhatsApp -->
+      @if (whatsappStatus(); as ws) {
+        <div class="rounded-lg px-3 py-2 text-xs"
+             [class.bg-emerald-100]="ws.type === 'success'"
+             [class.text-emerald-800]="ws.type === 'success'"
+             [class.bg-red-100]="ws.type === 'error'"
+             [class.text-red-800]="ws.type === 'error'">
+          {{ ws.message }}
+        </div>
+      }
+
+      <div class="flex flex-wrap gap-2.5 pt-1">
         <a [href]="pdfUrl(r.id)" target="_blank"
-           class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
+           class="rounded-lg bg-emerald-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-emerald-700">
           Descargar PDF
         </a>
-        <button (click)="reset()"
-                class="rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100">
+
+        <!-- Botones de WhatsApp independientes -->
+        <button type="button" (click)="sendWhatsappCopy('inquilino')" [disabled]="resendingInquilino()"
+                class="rounded-lg border border-emerald-600 bg-white px-3.5 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">
+          {{ resendingInquilino() ? 'Enviando…' : 'WhatsApp Inquilino' }}
+        </button>
+
+        <button type="button" (click)="sendWhatsappCopy('propietario')" [disabled]="resendingPropietario()"
+                class="rounded-lg border border-emerald-600 bg-white px-3.5 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">
+          {{ resendingPropietario() ? 'Enviando…' : 'WhatsApp Propietario' }}
+        </button>
+
+        <button type="button" (click)="reset()"
+                class="rounded-lg border border-emerald-300 bg-white px-3.5 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100">
           Nuevo recibo
         </button>
       </div>
@@ -60,6 +85,24 @@
         </label>
       </div>
 
+      <!-- Referencia bancaria antes del monto -->
+      <label class="block text-sm font-medium text-slate-600">
+        Referencia de pago bancario
+        <input formControlName="payment_reference" placeholder="Ej. 000123456789"
+               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+      </label>
+
+      <!-- Indicador de Tasas BCV -->
+      @if (ratesInfo()) {
+        <div class="flex items-center justify-between rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+          <span>{{ ratesInfo() }}</span>
+          @if (loadingRates()) {
+            <span class="animate-pulse font-medium">Actualizando…</span>
+          }
+        </div>
+      }
+
+      <!-- Fila USD (opcional) -->
       <div class="grid grid-cols-3 gap-3 text-sm font-medium text-slate-600">
         <label>Monto (USD)
           <input type="number" step="0.01" min="0" formControlName="amount_usd"
@@ -70,40 +113,76 @@
                  class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
         </label>
         <label>Monto (Bs.)
-          <input type="number" step="0.01" min="0" formControlName="amount_bs"
-                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+          <input type="text" [value]="(bsFromUsd() | number:'1.2-2') + ' Bs.'" disabled
+                 class="mt-1 block w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 font-mono text-slate-700 cursor-not-allowed" />
         </label>
       </div>
 
-      <dl class="space-y-1.5 rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
-        <div class="flex items-center justify-between">
-          <dt>Monto (Bs.)</dt>
-          <dd>{{ amountBs() | number:'1.2-2' }} Bs.</dd>
+      <!-- Fila EURO (opcional) -->
+      <div class="grid grid-cols-3 gap-3 text-sm font-medium text-slate-600">
+        <label>Monto (EURO)
+          <input type="number" step="0.01" min="0" formControlName="amount_eur"
+                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+        </label>
+        <label>Tasa (Bs./EURO)
+          <input type="number" step="0.0001" min="0" formControlName="exchange_rate_eur"
+                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+        </label>
+        <label>Monto (Bs.)
+          <input type="text" [value]="(bsFromEur() | number:'1.2-2') + ' Bs.'" disabled
+                 class="mt-1 block w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 font-mono text-slate-700 cursor-not-allowed" />
+        </label>
+      </div>
+
+      <!-- Monto directo en Bs (si no se usaron divisas) -->
+      @if (bsFromUsd() === 0 && bsFromEur() === 0) {
+        <div class="rounded-lg border border-dashed border-slate-200 p-3">
+          <label class="block text-sm font-medium text-slate-600">
+            O ingresar Monto directo en Bolívares (sin divisas)
+            <input type="number" step="0.01" min="0" formControlName="amount_bs_manual" placeholder="0.00"
+                   class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+          </label>
         </div>
+      }
+
+      <!-- Resumen de totales -->
+      <dl class="space-y-2 rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
         <div class="flex items-center justify-between">
-          <dt>IVA (16%)</dt>
-          <dd>{{ iva() | number:'1.2-2' }} Bs.</dd>
+          <dt>Monto recibido en Bs. (Suma USD + EURO)</dt>
+          <dd class="font-semibold text-slate-800">{{ amountBs() | number:'1.2-2' }} Bs.</dd>
         </div>
-        <div class="flex items-center justify-between border-t border-slate-200 pt-1.5 text-base font-semibold text-slate-800">
+
+        <div class="flex items-center justify-between border-t border-slate-200/60 pt-2">
+          <dt class="flex items-center gap-2">
+            <input type="checkbox" id="apply_iva" formControlName="apply_iva"
+                   class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+            <label for="apply_iva" class="cursor-pointer select-none font-medium text-slate-700">
+              Aplicar IVA ({{ form.controls.iva_rate.value }}%)
+            </label>
+          </dt>
+          <dd>
+            @if (applyIva()) {
+              <span class="font-medium text-slate-700">{{ iva() | number:'1.2-2' }} Bs.</span>
+            } @else {
+              <span class="text-xs text-slate-400">Omitido / No aplica</span>
+            }
+          </dd>
+        </div>
+
+        <div class="flex items-center justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-800">
           <dt>Total recibido</dt>
-          <dd>{{ total() | number:'1.2-2' }} Bs.</dd>
+          <dd class="text-lg text-blue-700">{{ total() | number:'1.2-2' }} Bs.</dd>
         </div>
       </dl>
 
-      <label class="block text-sm font-medium text-slate-600">
-        Referencia de pago bancario
-        <input formControlName="payment_reference" placeholder="Ej. 000123456789"
-               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-      </label>
-
-      <label class="flex items-center gap-2 text-sm text-slate-600">
+      <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
         <input type="checkbox" formControlName="send_whatsapp"
                class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
         Enviar por WhatsApp al inquilino (con copia al administrador)
       </label>
 
       <button type="submit" [disabled]="saving()"
-              class="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+              class="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors">
         {{ saving() ? 'Generando…' : 'Generar recibo' }}
       </button>
     </form>

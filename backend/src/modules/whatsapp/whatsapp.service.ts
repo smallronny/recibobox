@@ -1,5 +1,6 @@
 import { AppError } from '../../config/errors';
 import { ES_MONTHS, money, rate } from '../receipts/receipt.constants';
+import { renderReceiptPdf } from '../receipts/receipts.pdf';
 import type { ReceiptFlat } from '../receipts/receipts.service';
 
 /**
@@ -86,12 +87,13 @@ export class WhatsappService {
     return lines.join('\n');
   }
 
-  async sendReceipt(r: ReceiptFlat, pdf: Buffer): Promise<void> {
+  async sendToTenant(r: ReceiptFlat): Promise<void> {
     this.assertConfigured();
+    const num = String(r.receipt_number).padStart(6, '0');
+    const pdf = await renderReceiptPdf(r, 'inquilino');
+    const filename = `recibo-${num}-inquilino.pdf`;
     const text = this.summary(r, false);
-    const filename = `recibo-${String(r.receipt_number).padStart(6, '0')}.pdf`;
 
-    // 1) Al inquilino: documento PDF dual + caption con el detalle (solo en Bs)
     const mediaId = await this.uploadPdf(pdf, filename);
     await this.messages({
       messaging_product: 'whatsapp',
@@ -100,17 +102,38 @@ export class WhatsappService {
       type: 'document',
       document: { id: mediaId, filename, caption: text },
     });
+  }
 
-    // 2) Copia al administrador (resumen en texto con detalle de divisas si aplica)
-    if (this.admin && this.admin !== r.phone) {
-      const adminText = this.summary(r, true);
-      await this.messages({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: this.admin,
-        type: 'text',
-        text: { body: `📋 Copia · administración\n\n${adminText}` },
-      });
+  async sendToOwner(r: ReceiptFlat): Promise<void> {
+    this.assertConfigured();
+    if (!this.admin) {
+      throw new AppError(400, 'ADMIN_WHATSAPP no configurado');
+    }
+    const num = String(r.receipt_number).padStart(6, '0');
+    const pdf = await renderReceiptPdf(r, 'propietario');
+    const filename = `recibo-${num}-propietario.pdf`;
+    const text = `📋 Copia · propietario\n\n${this.summary(r, true)}`;
+
+    const mediaId = await this.uploadPdf(pdf, filename);
+    await this.messages({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: this.admin,
+      type: 'document',
+      document: { id: mediaId, filename, caption: text },
+    });
+  }
+
+  async sendReceipt(r: ReceiptFlat, target: 'all' | 'inquilino' | 'propietario' = 'all'): Promise<void> {
+    if (target === 'inquilino') {
+      await this.sendToTenant(r);
+    } else if (target === 'propietario') {
+      await this.sendToOwner(r);
+    } else {
+      await this.sendToTenant(r);
+      if (this.admin) {
+        await this.sendToOwner(r);
+      }
     }
   }
 }

@@ -106,20 +106,20 @@ jobs:
       # -----------------------------------------------------------------
 
       - name: Instalar dependencias globales del repositorio
-        run: npm ci
+        run: npm install
 
       - name: Build frontend Website
         if: steps.changes.outputs.frontend == 'true'
         working-directory: ./frontend
         run: |
-          npm ci
+          npm install
           CI=true npm run build
 
       - name: Build backend
         if: steps.changes.outputs.backend == 'true'
         working-directory: ./backend
         run: |
-          npm ci
+          npm install
           npm run build
 
       # -----------------------------------------------------------------
